@@ -1,23 +1,26 @@
 package bskyviewer.indexer
 
+import app.bsky.jetstream.SubscribeQueryParams
+import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.reactor.mono
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
-import reactor.core.publisher.Mono
 import reactor.core.scheduler.Schedulers
-import work.socialhub.kbsky.model.share.RecordUnion
-import work.socialhub.kbsky.stream.ATProtocolStreamFactory
-import work.socialhub.kbsky.stream.api.entity.com.atproto.SyncSubscribeReposRequest
-import work.socialhub.kbsky.stream.entity.com.atproto.callback.SyncEventCallback
+import sh.christian.ozone.jetstream.JetstreamApi
+
+private val logger = KotlinLogging.logger {}
 
 @Component
 class Listener(val messageQueue: MessageQueue) {
+    val client = JetstreamApi()
 
     @EventListener(ApplicationReadyEvent::class)
     fun startup() {
-        Mono.fromCallable {
-            val stream = ATProtocolStreamFactory.instance().sync().subscribeRepos(SyncSubscribeReposRequest())
-            stream.eventCallback(messageQueue)
-        }.subscribeOn(Schedulers.boundedElastic()).subscribe()
+        mono {
+            val subscription = client.subscribe(SubscribeQueryParams())
+            subscription.collect { messageQueue.emit(it) }
+            subscription
+        }.subscribeOn(Schedulers.parallel()).subscribe()
     }
 }

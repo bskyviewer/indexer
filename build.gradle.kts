@@ -1,6 +1,6 @@
 plugins {
-    kotlin("jvm") version "1.9.25"
-    kotlin("plugin.spring") version "1.9.25"
+    kotlin("jvm") version "2.1.21"
+    kotlin("plugin.spring") version "2.1.21"
     id("org.springframework.boot") version "3.5.3"
     id("io.spring.dependency-management") version "1.1.7"
 }
@@ -25,9 +25,8 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactor")
 
-    implementation("work.socialhub.kbsky:core:0.3.0")
-    implementation("work.socialhub.kbsky:auth:0.3.0")
-    implementation("work.socialhub.kbsky:stream:0.3.0")
+    implementation("io.github.oshai:kotlin-logging-jvm:7.0.3")
+    implementation("sh.christian.ozone:jetstream:0.3.3")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("io.projectreactor:reactor-test")

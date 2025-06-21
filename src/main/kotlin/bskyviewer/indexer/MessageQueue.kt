@@ -1,34 +1,26 @@
 package bskyviewer.indexer
 
+import app.bsky.jetstream.SubscribeMessage
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Service
 import reactor.core.publisher.Sinks
-import work.socialhub.kbsky.model.share.RecordUnion
-import work.socialhub.kbsky.stream.entity.com.atproto.callback.SyncEventCallback
 import java.time.Duration
-import kotlin.time.Duration.Companion.seconds
+
+private val logger = KotlinLogging.logger {}
 
 @Service
-class MessageQueue : SyncEventCallback {
-    val queue = Sinks.many().unicast().onBackpressureBuffer<Message>()
+class MessageQueue {
+    val queue = Sinks.many().unicast().onBackpressureBuffer<SubscribeMessage>()
 
     @EventListener(ApplicationReadyEvent::class)
     fun startup() {
         queue.asFlux().buffer(Duration.ofSeconds(10)).subscribe { println(it.size) }
+        logger.info { "subscribed" }
     }
 
-    override fun onEvent(
-        cid: String?,
-        uri: String?,
-        record: RecordUnion
-    ) {
-        queue.tryEmitNext(Message(cid, uri, record))
+    fun emit(message: SubscribeMessage) {
+        queue.tryEmitNext(message)
     }
 }
-
-data class Message(
-    val cid: String?,
-    val uri: String?,
-    val record: RecordUnion
-)
