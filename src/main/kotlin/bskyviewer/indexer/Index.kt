@@ -33,7 +33,7 @@ class Index(
     val config = IndexWriterConfig(analyzer).also {
         it.ramPerThreadHardLimitMB = memoryLimit
     }
-    var parser = QueryParser("text", analyzer)
+    var parser = QueryParser("text_en", analyzer)
     val writer = IndexWriter(dir, config)
     val searcherManager = SearcherManager(writer, SearcherFactory())
     val sortFields: Map<String, SortField> = mapOf(
@@ -50,14 +50,14 @@ class Index(
         val searcher = searcherManager.acquire()
         try {
             val sort = Sort(*sorts.map { sortFields[it] }.toTypedArray())
-            var query = parser.parse(term)
-            if (dids.isNotEmpty()) {
-                val builder = BooleanQuery.Builder()
-                builder.add(query, BooleanClause.Occur.MUST)
-                builder.add(KeywordField.newSetQuery("did", dids.map(::BytesRef)), BooleanClause.Occur.MUST)
-                query = builder.build()
+            val builder = BooleanQuery.Builder()
+            if (term.isNotBlank()) {
+                builder.add(parser.parse(term), BooleanClause.Occur.MUST)
             }
-            val result = searcher.search(query, n, sort)
+            if (dids.isNotEmpty()) {
+                builder.add(KeywordField.newSetQuery("did", dids.map(::BytesRef)), BooleanClause.Occur.MUST)
+            }
+            val result = searcher.search(builder.build(), n, sort)
             val storedFields = searcher.storedFields()
             return result.scoreDocs.map {
                 val doc = storedFields.document(it.doc)
@@ -117,7 +117,6 @@ class Index(
                 }
 
                 record["text"]?.jsonPrimitive?.content?.let { text ->
-                    doc.add(TextField("text", text, Field.Store.NO))
                     knownLangs.forEach { lang ->
                         doc.add(TextField("text_$lang", text, Field.Store.NO))
                     }

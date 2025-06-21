@@ -9,9 +9,8 @@ import org.apache.lucene.analysis.standard.StandardAnalyzer
 import org.meeuw.i18n.languages.LanguageCode
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider
 import org.springframework.core.type.filter.AssignableTypeFilter
-import java.util.Locale
+import java.util.*
 import kotlin.jvm.optionals.getOrNull
-import kotlin.streams.asSequence
 
 private val logger = KotlinLogging.logger {}
 
@@ -54,13 +53,8 @@ class Analyser : DelegatingAnalyzerWrapper(PER_FIELD_REUSE_STRATEGY) {
         } catch (_: Exception) {
             lang
         }
-        try {
-            // If specific language not found, fall back to macrolanguage (e.g nn -> no)
-            val code = LanguageCode.languageCode(code)
-            code?.macroLanguages()?.map(LanguageCode::code)?.find { it in byLang }
-        } catch (_: Exception) {
-            LanguageCode.streamByNames().asSequence().find { it.key.lowercase() == lang.lowercase() }?.value?.code()
-        }
+        // If specific language not found, fall back to macrolanguage (e.g nn -> no)
+        LanguageCode.get(code).getOrNull()?.macroLanguages()?.map(LanguageCode::code)?.find { it in byLang }
     }
 
     init {
