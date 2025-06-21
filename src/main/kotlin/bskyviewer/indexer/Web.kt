@@ -11,6 +11,8 @@ class Web(val index: Index) {
     @GetMapping("/")
     fun index(
         @RequestParam(defaultValue = "[* TO *]") q: String,
-        @RequestParam(defaultValue = "desc") sort: List<String>
-    ) = index.search(q, sort)
+        @RequestParam(defaultValue = "desc") sort: List<String>,
+        @RequestParam(defaultValue = "100") limit: Int,
+        @RequestParam(required = false) dids: List<String>?,
+    ) = index.search(q, limit, sort, dids ?: emptyList())
 }

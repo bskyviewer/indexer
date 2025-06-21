@@ -16,6 +16,8 @@ import org.apache.lucene.document.TextField
 import org.apache.lucene.index.IndexWriter
 import org.apache.lucene.index.IndexWriterConfig
 import org.apache.lucene.queryparser.classic.QueryParser
+import org.apache.lucene.search.BooleanClause
+import org.apache.lucene.search.BooleanQuery
 import org.apache.lucene.search.SearcherFactory
 import org.apache.lucene.search.SearcherManager
 import org.apache.lucene.search.Sort
@@ -48,11 +50,18 @@ class Index(val objectMapper: ObjectMapper) {
         config.setOpenMode(IndexWriterConfig.OpenMode.CREATE_OR_APPEND)
     }
 
-    fun search(term: String, sorts: List<String>): List<Map<String?, Any?>> {
+    fun search(term: String, n: Int, sorts: List<String>, dids: List<String>): List<Map<String?, Any?>> {
         val searcher = searcherManager.acquire()
         try {
             val sort = Sort(*sorts.map { sortFields[it] }.toTypedArray())
-            val result = searcher.search(parser.parse(term), 10, sort)
+            var query = parser.parse(term)
+            if (dids.isNotEmpty()) {
+                val builder = BooleanQuery.Builder()
+                builder.add(query, BooleanClause.Occur.MUST)
+                builder.add(KeywordField.newSetQuery("did", dids.map(::BytesRef)), BooleanClause.Occur.MUST)
+                query = builder.build()
+            }
+            val result = searcher.search(query, n, sort)
             val storedFields = searcher.storedFields()
             return result.scoreDocs.map {
                 val doc = storedFields.document(it.doc)
