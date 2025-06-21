@@ -27,6 +27,16 @@ dependencies {
 
     implementation("io.github.oshai:kotlin-logging-jvm:7.0.3")
     implementation("sh.christian.ozone:jetstream:0.3.3")
+    implementation("org.meeuw.i18n:i18n-iso-639:3.8")
+
+    implementation("org.apache.lucene:lucene-core:10.2.1")
+    implementation("org.apache.lucene:lucene-queryparser:10.2.1")
+    implementation("org.apache.lucene:lucene-analysis-common:10.2.1")
+    implementation("org.apache.lucene:lucene-analysis-kuromoji:10.2.1")
+    implementation("org.apache.lucene:lucene-analysis-morfologik:10.2.1")
+    implementation("org.apache.lucene:lucene-analysis-nori:10.2.1")
+    implementation("org.apache.lucene:lucene-analysis-smartcn:10.2.1")
+    implementation("org.apache.lucene:lucene-analysis-stempel:10.2.1")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("io.projectreactor:reactor-test")

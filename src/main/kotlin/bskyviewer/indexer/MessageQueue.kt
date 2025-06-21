@@ -2,25 +2,25 @@ package bskyviewer.indexer
 
 import app.bsky.jetstream.SubscribeMessage
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.springframework.boot.context.event.ApplicationReadyEvent
-import org.springframework.context.event.EventListener
-import org.springframework.stereotype.Service
+import org.springframework.stereotype.Component
 import reactor.core.publisher.Sinks
 import java.time.Duration
 
 private val logger = KotlinLogging.logger {}
 
-@Service
-class MessageQueue {
+@Component
+class MessageQueue(val index: Index) {
     val queue = Sinks.many().unicast().onBackpressureBuffer<SubscribeMessage>()
 
-    @EventListener(ApplicationReadyEvent::class)
-    fun startup() {
-        queue.asFlux().buffer(Duration.ofSeconds(10)).subscribe { println(it.size) }
+    init {
+        queue.asFlux().buffer(Duration.ofSeconds(1)).subscribe { index.index(it) }
         logger.info { "subscribed" }
     }
 
     fun emit(message: SubscribeMessage) {
-        queue.tryEmitNext(message)
+        val result = queue.tryEmitNext(message)
+        if (result.isFailure) {
+            logger.warn { "failed to emit: $result - message was $message" }
+        }
     }
 }
