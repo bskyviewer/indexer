@@ -58,7 +58,7 @@ class Analyser : DelegatingAnalyzerWrapper(PER_FIELD_REUSE_STRATEGY) {
             // If specific language not found, fall back to macrolanguage (e.g nn -> no)
             val code = LanguageCode.languageCode(code)
             code?.macroLanguages()?.map(LanguageCode::code)?.find { it in byLang }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             LanguageCode.streamByNames().asSequence().find { it.key.lowercase() == lang.lowercase() }?.value?.code()
         }
     }

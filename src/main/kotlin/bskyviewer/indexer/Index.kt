@@ -74,6 +74,7 @@ class Index(val objectMapper: ObjectMapper) {
     }
 
     fun index(it: List<SubscribeMessage>) {
+        logger.info { "indexing ${it.size} messages" }
         val created = HashMap<String, SubscribeMessage>()
         val deleted = ArrayList<String>()
         it.forEach {
@@ -162,7 +163,9 @@ class Index(val objectMapper: ObjectMapper) {
 
             writer.addDocument(doc)
         }
+        logger.info { "done indexing ${it.size} messages" }
         writer.commit()
         searcherManager.maybeRefresh()
+        logger.info { "commit and refresh ${it.size} messages" }
     }
 }

@@ -13,8 +13,7 @@ class MessageQueue(val index: Index) {
     val queue = Sinks.many().unicast().onBackpressureBuffer<SubscribeMessage>()
 
     init {
-        queue.asFlux().buffer(Duration.ofSeconds(1)).subscribe { index.index(it) }
-        logger.info { "subscribed" }
+        queue.asFlux().buffer(Duration.ofSeconds(5)).subscribe { index.index(it) }
     }
 
     fun emit(message: SubscribeMessage) {

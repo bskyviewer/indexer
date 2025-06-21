@@ -5,7 +5,6 @@ import kotlinx.coroutines.reactor.mono
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
-import reactor.core.scheduler.Schedulers
 import sh.christian.ozone.api.Nsid
 import sh.christian.ozone.jetstream.JetstreamApi
 
