@@ -3,40 +3,36 @@ package bskyviewer.indexer
 import app.bsky.jetstream.SubscribeMessage
 import app.bsky.jetstream.SubscribeOperation
 import bskyviewer.indexer.lucene.Analyser
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.readValue
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.datetime.Instant
-import kotlinx.serialization.json.*
-import org.apache.lucene.document.Document
-import org.apache.lucene.document.Field
-import org.apache.lucene.document.KeywordField
-import org.apache.lucene.document.SortedNumericDocValuesField
-import org.apache.lucene.document.TextField
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import org.apache.lucene.document.*
 import org.apache.lucene.index.IndexWriter
 import org.apache.lucene.index.IndexWriterConfig
+import org.apache.lucene.index.IndexableField
 import org.apache.lucene.queryparser.classic.QueryParser
-import org.apache.lucene.search.BooleanClause
-import org.apache.lucene.search.BooleanQuery
-import org.apache.lucene.search.SearcherFactory
-import org.apache.lucene.search.SearcherManager
-import org.apache.lucene.search.Sort
-import org.apache.lucene.search.SortField
-import org.apache.lucene.search.SortedNumericSortField
+import org.apache.lucene.search.*
 import org.apache.lucene.store.FSDirectory
 import org.apache.lucene.util.BytesRef
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
-import kotlin.collections.toTypedArray
 import kotlin.io.path.Path
 import kotlin.time.Duration.Companion.microseconds
 
 private val logger = KotlinLogging.logger {}
 
 @Component
-class Index(val objectMapper: ObjectMapper) {
+class Index(
+    @Value("\${indexer.lucene-ram-limit}") val memoryLimit: Int
+) {
     val analyzer = Analyser()
     val dir: FSDirectory = FSDirectory.open(Path("index"))
-    val config = IndexWriterConfig(analyzer)
+    val config = IndexWriterConfig(analyzer).also {
+        it.ramPerThreadHardLimitMB = memoryLimit
+    }
     var parser = QueryParser("text", analyzer)
     val writer = IndexWriter(dir, config)
     val searcherManager = SearcherManager(writer, SearcherFactory())
@@ -65,13 +61,9 @@ class Index(val objectMapper: ObjectMapper) {
             val storedFields = searcher.storedFields()
             return result.scoreDocs.map {
                 val doc = storedFields.document(it.doc)
-                val result: MutableMap<String?, Any?> = doc.groupBy({ f -> f.name() }, { f ->
-                    if (f.name() == "json") {
-                        objectMapper.readValue(f.stringValue())
-                    } else {
-                        f.numericValue() ?: f.stringValue()
-                    }
-                }).toMutableMap()
+                val result: MutableMap<String?, Any?> = doc.groupBy(IndexableField::name) { f ->
+                    f.numericValue() ?: f.stringValue()
+                }.toMutableMap()
                 listOf("did", "rkey", "createdAt").forEach { k ->
                     result[k] = (result[k] as? List<*>)?.first()
                 }
