@@ -2,6 +2,7 @@ package bskyviewer.indexer
 
 import app.bsky.jetstream.SubscribeMessage
 import io.github.oshai.kotlinlogging.KotlinLogging
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import reactor.core.publisher.Sinks
 import java.time.Duration
@@ -9,11 +10,11 @@ import java.time.Duration
 private val logger = KotlinLogging.logger {}
 
 @Component
-class MessageQueue(val index: Index) {
+class MessageQueue(val index: Index, @Value("\${indexer.buffer-duration}") val bufferDuration: Duration) {
     val queue = Sinks.many().unicast().onBackpressureBuffer<SubscribeMessage>()
 
     init {
-        queue.asFlux().buffer(Duration.ofSeconds(5)).subscribe { index.index(it) }
+        queue.asFlux().buffer(bufferDuration).subscribe { index.index(it) }
     }
 
     fun emit(message: SubscribeMessage) {
