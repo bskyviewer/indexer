@@ -9,5 +9,8 @@ import org.springframework.web.bind.annotation.RestController
 class Web(val index: Index) {
     @ResponseBody
     @GetMapping("/")
-    fun index(@RequestParam(defaultValue = "") q: String) = index.search(q)
+    fun index(
+        @RequestParam(defaultValue = "[* TO *]") q: String,
+        @RequestParam(defaultValue = "desc") sort: List<String>
+    ) = index.search(q, sort)
 }

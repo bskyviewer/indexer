@@ -11,6 +11,7 @@ import org.springframework.context.annotation.ClassPathScanningCandidateComponen
 import org.springframework.core.type.filter.AssignableTypeFilter
 import java.util.Locale
 import kotlin.jvm.optionals.getOrNull
+import kotlin.streams.asSequence
 
 private val logger = KotlinLogging.logger {}
 
@@ -41,19 +42,28 @@ class Analyser : DelegatingAnalyzerWrapper(PER_FIELD_REUSE_STRATEGY) {
     }
 
     fun toCode(lang: String?): String? = lang.let {
-        try {
+        if (lang.isNullOrBlank()) return null
+        val code = try {
             LanguageCode.get(lang)
             val locale = Locale.Builder().setLanguageTag(lang).build()
             // Most analyzers classified by 2-letter code
             if (locale.language in byLang) return locale.language
             // SoraniAnalyser has a 3-letter code (ckb uses a different alphabet than ku)
             if (locale.isO3Language in byLang) return locale.isO3Language
+            LanguageCode.get(locale.isO3Language).getOrNull()?.code() ?: lang
+        } catch (_: Exception) {
+            lang
+        }
+        try {
             // If specific language not found, fall back to macrolanguage (e.g nn -> no)
-            val code = LanguageCode.get(locale.isO3Language).getOrNull()
+            val code = LanguageCode.languageCode(code)
             code?.macroLanguages()?.map(LanguageCode::code)?.find { it in byLang }
         } catch (e: Exception) {
-            logger.warn(e) { "failed to parse language $lang" }
-            null
+            LanguageCode.streamByNames().asSequence().find { it.key.lowercase() == lang.lowercase() }?.value?.code()
         }
+    }
+
+    init {
+        LanguageCode.registerFallback("jp", LanguageCode.languageCode("ja"))
     }
 }
