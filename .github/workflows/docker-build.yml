@@ -28,4 +28,4 @@ jobs:
 
       - name: Build and push Docker image
         id: push
-        run: ./gradlew bootBuildImage --imageName=ghcr.io/${{ github.repository }} --publishImage
+        run: ./gradlew bootBuildImage --imageName=ghcr.io/${{ github.repository }} --publishImage --no-daemon
