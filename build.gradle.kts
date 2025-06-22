@@ -58,6 +58,9 @@ tasks.withType<Test> {
 }
 
 tasks.named<BootBuildImage>("bootBuildImage") {
+    buildCache {
+        volume { name = "build-cache" }
+    }
     environment.putAll(
         mapOf(
             "BP_JVM_VERSION" to "21",

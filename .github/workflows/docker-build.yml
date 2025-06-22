@@ -26,12 +26,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata for Docker
-        id: meta
-        uses: docker/metadata-action@v5
+      - name: Restore Docker Build Cache
+        id: restore_cache
+        uses: BYK/docker-volume-cache-action/restore@main
         with:
-          images: ghcr.io/${{ github.repository }}
+          key: docker-volumes-${{ hashFiles('build.gradle.kts') }}
+          volumes: |
+            build-cache
 
       - name: Build and push Docker image
         id: push
         run: ./gradlew bootBuildImage --imageName=ghcr.io/${{ github.repository }} --publishImage
+
+      - name: Save Docker Build Cache
+        uses: BYK/docker-volume-cache-action/save@main
+        with:
+          key: ${{ steps.restore_cache.outputs.cache-primary-key }}
+          volumes: |
+            build-cache
