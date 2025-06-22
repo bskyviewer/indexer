@@ -19,17 +19,18 @@ import org.apache.lucene.store.FSDirectory
 import org.apache.lucene.util.BytesRef
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
-import kotlin.io.path.Path
+import java.nio.file.Path
 import kotlin.time.Duration.Companion.microseconds
 
 private val logger = KotlinLogging.logger {}
 
 @Component
 class Index(
-    @Value("\${indexer.lucene-ram-limit}") val memoryLimit: Int
-) {
+    @Value("\${indexer.lucene-ram-limit}") val memoryLimit: Int,
+    @Value("\${indexer.lucene-index-dir:/tmp/index}") val indexPath: Path
+): AutoCloseable {
     val analyzer = Analyser()
-    val dir: FSDirectory = FSDirectory.open(Path("index"))
+    val dir: FSDirectory = FSDirectory.open(indexPath)
     val config = IndexWriterConfig(analyzer).also {
         it.ramPerThreadHardLimitMB = memoryLimit
     }
@@ -167,5 +168,10 @@ class Index(
         writer.commit()
         searcherManager.maybeRefresh()
         logger.info { "commit and refresh ${it.size} messages" }
+    }
+
+    override fun close() {
+        writer.close()
+        dir.close()
     }
 }
