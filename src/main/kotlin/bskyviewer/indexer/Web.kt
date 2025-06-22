@@ -1,29 +1,30 @@
 package bskyviewer.indexer
 
-import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.bind.annotation.PostMapping
-import org.springframework.web.bind.annotation.RequestBody
-import org.springframework.web.bind.annotation.RequestParam
-import org.springframework.web.bind.annotation.ResponseBody
-import org.springframework.web.bind.annotation.RestController
+import bskyviewer.indexer.lucene.Analyser
+import org.springframework.http.MediaType
+import org.springframework.web.bind.annotation.*
 
 @RestController
-class Web(val index: Index) {
-    @ResponseBody
+class Web(val index: Index, val analyser: Analyser) {
+
+    @GetMapping("/langs", produces = [MediaType.APPLICATION_JSON_VALUE])
+    fun langs() = mapOf("seen" to index.langs, "known" to analyser.byLang.keys)
+
     @GetMapping("/")
     fun index(
         @RequestParam(defaultValue = "") q: String,
         @RequestParam(defaultValue = "desc") sort: List<String>,
         @RequestParam(defaultValue = "100") limit: Int,
+        @RequestParam(defaultValue = "false") debug: Boolean,
         @RequestParam(required = false) dids: List<String>?,
-    ) = index.search(q, limit, sort, dids ?: emptyList())
+    ) = index.search(q, limit, sort, dids ?: emptyList(), debug)
 
-    @ResponseBody
     @PostMapping("/")
     fun indexer(
         @RequestParam(defaultValue = "") q: String,
         @RequestParam(defaultValue = "desc") sort: List<String>,
         @RequestParam(defaultValue = "100") limit: Int,
+        @RequestParam(defaultValue = "false") debug: Boolean,
         @RequestBody dids: List<String>,
-    ) = index.search(q, limit, sort, dids)
+    ) = index.search(q, limit, sort, dids, debug)
 }

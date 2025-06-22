@@ -4,6 +4,7 @@ import app.bsky.jetstream.SubscribeMessage
 import app.bsky.jetstream.SubscribeOperation
 import bskyviewer.indexer.lucene.Analyser
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.ktor.util.collections.ConcurrentSet
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
@@ -26,10 +27,11 @@ private val logger = KotlinLogging.logger {}
 
 @Component
 class Index(
+    val analyzer: Analyser,
     @Value("\${indexer.lucene-ram-limit}") val memoryLimit: Int,
     @Value("\${indexer.lucene-index-dir:/tmp/index}") val indexPath: Path
-): AutoCloseable {
-    val analyzer = Analyser()
+) : AutoCloseable {
+    val langs = ConcurrentSet<String>()
     val dir: FSDirectory = FSDirectory.open(indexPath)
     val config = IndexWriterConfig(analyzer).also {
         it.ramPerThreadHardLimitMB = memoryLimit
@@ -47,7 +49,7 @@ class Index(
         config.setOpenMode(IndexWriterConfig.OpenMode.CREATE_OR_APPEND)
     }
 
-    fun search(term: String, n: Int, sorts: List<String>, dids: List<String>): List<Map<String?, Any?>> {
+    fun search(term: String, n: Int, sorts: List<String>, dids: List<String>, debug: Boolean): Map<String?, Any?> {
         val searcher = searcherManager.acquire()
         try {
             val sort = Sort(*sorts.map { sortFields[it] }.toTypedArray())
@@ -58,9 +60,16 @@ class Index(
             if (dids.isNotEmpty()) {
                 builder.add(KeywordField.newSetQuery("did", dids.map(::BytesRef)), BooleanClause.Occur.MUST)
             }
-            val result = searcher.search(builder.build(), n, sort)
+            val response = HashMap<String?, Any?>()
+            val query = builder.build()
+            val weights = ArrayList<Any>()
+            if (debug) {
+                response["query"] = query.toString()
+                response["weights"] = weights
+            }
+            val result = searcher.search(query, n, sort)
             val storedFields = searcher.storedFields()
-            return result.scoreDocs.map {
+            response["result"] = result.scoreDocs.map {
                 val doc = storedFields.document(it.doc)
                 val result: MutableMap<String?, Any?> = doc.groupBy(IndexableField::name) { f ->
                     f.numericValue() ?: f.stringValue()
@@ -68,8 +77,13 @@ class Index(
                 listOf("did", "rkey", "createdAt").forEach { k ->
                     result[k] = (result[k] as? List<*>)?.first()
                 }
+                if (debug) {
+                    weights.add(searcher.explain(query, it.doc))
+                }
                 result
             }
+
+            return response
         } finally {
             searcherManager.release(searcher)
         }
@@ -113,6 +127,9 @@ class Index(
                     doc.add(KeywordField("lang", it, Field.Store.YES))
                     analyzer.toCode(it)
                 }?.toSet() ?: emptySet()
+                if (this.langs.size + knownLangs.size < 500) {
+                    this.langs.addAll(knownLangs)
+                }
                 knownLangs.forEach {
                     doc.add(KeywordField("known_lang", it, Field.Store.YES))
                 }
