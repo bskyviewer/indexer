@@ -1,3 +1,5 @@
+import org.springframework.boot.gradle.tasks.bundling.BootBuildImage
+
 plugins {
     kotlin("jvm") version "2.1.21"
     kotlin("plugin.spring") version "2.1.21"
@@ -53,4 +55,15 @@ kotlin {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+tasks.named<BootBuildImage>("bootBuildImage") {
+    environment.putAll(
+        mapOf(
+            "BP_JVM_VERSION" to "21",
+            "BP_JVM_CDS_ENABLED" to "true",
+            "BPE_DELIM_JAVA_TOOL_OPTIONS" to " ",
+            "BPE_APPEND_JAVA_TOOL_OPTIONS" to "--enable-native-access=ALL-UNNAMED --add-modules jdk.incubator.vector",
+        )
+    )
 }
