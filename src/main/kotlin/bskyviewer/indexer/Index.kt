@@ -4,7 +4,7 @@ import app.bsky.jetstream.SubscribeMessage
 import app.bsky.jetstream.SubscribeOperation
 import bskyviewer.indexer.lucene.Analyser
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.ktor.util.collections.ConcurrentSet
+import io.ktor.util.collections.*
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
@@ -20,6 +20,7 @@ import org.apache.lucene.store.FSDirectory
 import org.apache.lucene.util.BytesRef
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
+import java.io.File
 import java.nio.file.Path
 import kotlin.time.Duration.Companion.microseconds
 
@@ -189,6 +190,20 @@ class Index(
         writer.commit()
         searcherManager.maybeRefresh()
         logger.info { "commit and refresh ${it.size} messages" }
+    }
+
+    fun size(): String {
+        val bytes = indexPath.toFile()
+            .walkTopDown()
+            .filter { it.isFile }
+            .sumOf(File::length)
+
+        return when {
+            bytes >= 1 shl 30 -> "%.1f GB".format(bytes.toDouble() / (1 shl 30))
+            bytes >= 1 shl 20 -> "%.1f MB".format(bytes.toDouble() / (1 shl 20))
+            bytes >= 1 shl 10 -> "%.0f kB".format(bytes.toDouble() / (1 shl 10))
+            else -> "$bytes bytes"
+        }
     }
 
     override fun close() {
