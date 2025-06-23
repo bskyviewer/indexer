@@ -72,7 +72,6 @@ class Index(
     }
 
     fun search(params: Web.IndexParams): HashMap<String, Any> {
-        logger.info { params }
         val searcher = searcherManager.acquire()
         try {
             val sort = Sort(*params.sort.map { sortFields[it] }.toTypedArray())
