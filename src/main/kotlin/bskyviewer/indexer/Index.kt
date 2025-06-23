@@ -6,6 +6,10 @@ import bskyviewer.indexer.lucene.Analyser
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.util.collections.*
 import kotlinx.datetime.Instant
+import kotlinx.datetime.format
+import kotlinx.datetime.format.DateTimeComponents
+import kotlinx.datetime.format.char
+import kotlinx.datetime.toKotlinInstant
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -22,9 +26,26 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import java.io.File
 import java.nio.file.Path
+import java.time.ZonedDateTime
 import kotlin.time.Duration.Companion.microseconds
 
 private val logger = KotlinLogging.logger {}
+private val format = DateTimeComponents.Format {
+    year()
+    char('-')
+    monthNumber()
+    char('-')
+    dayOfMonth()
+    char('T')
+    hour()
+    char(':')
+    minute()
+    char(':')
+    second()
+    char('.')
+    secondFraction(6)
+    char('Z')
+}
 
 @Component
 class Index(
@@ -121,10 +142,11 @@ class Index(
                 val record = value.commit?.record?.value?.jsonObject ?: emptyMap()
                 val has = HashSet<String>()
 
-                val createdAt = record["createdAt"]?.jsonPrimitive?.content ?: Instant.fromEpochSeconds(0)
-                    .plus(value.time_us.microseconds).toString()
-                doc.add(KeywordField("createdAt", createdAt, Field.Store.YES))
-                doc.add(SortedNumericDocValuesField("time_ms", Instant.parse(createdAt).toEpochMilliseconds()))
+                val createdAt = record["createdAt"]?.jsonPrimitive?.content?.let {
+                    ZonedDateTime.parse(it).toInstant().toKotlinInstant()
+                } ?: Instant.fromEpochSeconds(0).plus(value.time_us.microseconds)
+                doc.add(KeywordField("createdAt", createdAt.format(format), Field.Store.YES))
+                doc.add(SortedNumericDocValuesField("time_ms", createdAt.toEpochMilliseconds()))
 
                 val knownLangs = record["langs"]?.jsonArray?.mapNotNull {
                     it.jsonPrimitive.content
