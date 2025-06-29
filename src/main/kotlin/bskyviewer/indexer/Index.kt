@@ -51,8 +51,10 @@ private val format = DateTimeComponents.Format {
 class Index(
     val analyzer: Analyser,
     @Value("\${indexer.lucene-ram-limit}") val memoryLimit: Int,
-    @Value("\${indexer.lucene-index-dir:/tmp/index}") val indexPath: Path
+    @Value("\${indexer.lucene-index-dir:/tmp/index}") val indexPath: Path,
+    @Value("\${indexer.stored-fields}") val storedFields: List<String>
 ) : AutoCloseable {
+
     val langs = ConcurrentSet<String>()
     val dir: FSDirectory = FSDirectory.open(indexPath)
     val config = IndexWriterConfig(analyzer).also {
@@ -135,8 +137,8 @@ class Index(
             val doc = Document()
 
             try {
-                doc.add(KeywordField("rkey", key, Field.Store.YES))
-                doc.add(KeywordField("did", value.did.did, Field.Store.YES))
+                doc.add(KeywordField("rkey", key, storage("rkey")))
+                doc.add(KeywordField("did", value.did.did, storage("did")))
 
                 val record = value.commit?.record?.value?.jsonObject ?: emptyMap()
                 val has = HashSet<String>()
@@ -144,40 +146,42 @@ class Index(
                 val createdAt = record["createdAt"]?.jsonPrimitive?.content?.let {
                     ZonedDateTime.parse(it).toInstant().toKotlinInstant()
                 } ?: Instant.fromEpochSeconds(0).plus(value.time_us.microseconds)
-                doc.add(KeywordField("createdAt", createdAt.format(format), Field.Store.YES))
+                doc.add(KeywordField("createdAt", createdAt.format(format), storage("createdAt")))
                 doc.add(SortedNumericDocValuesField("time_ms", createdAt.toEpochMilliseconds()))
-                doc.add(StoredField("timeDebug", "${value.time_us} / ${record["createdAt"]?.jsonPrimitive?.content}"))
+                if ("timeDebug" in storedFields) doc.add(
+                    StoredField("timeDebug", "${value.time_us} / ${record["createdAt"]?.jsonPrimitive?.content}")
+                )
 
                 val knownLangs = record["langs"]?.jsonArray?.mapNotNull {
                     it.jsonPrimitive.content
                 }?.mapNotNull {
-                    doc.add(KeywordField("lang", it, Field.Store.YES))
+                    doc.add(KeywordField("lang", it, storage("lang")))
                     analyzer.toCode(it)
                 }?.toSet() ?: emptySet()
                 if (this.langs.size + knownLangs.size < 500) {
                     this.langs.addAll(knownLangs)
                 }
                 knownLangs.forEach {
-                    doc.add(KeywordField("known_lang", it, Field.Store.YES))
+                    doc.add(KeywordField("known_lang", it, storage("known_lang")))
                 }
 
                 record["text"]?.jsonPrimitive?.content?.let { text ->
                     knownLangs.forEach { lang ->
-                        doc.add(TextField("text_$lang", text, Field.Store.NO))
+                        doc.add(TextField("text_$lang", text, storage("text", "text_$lang")))
                     }
                 }
 
                 record["embed"]?.jsonObject["\$type"]?.jsonPrimitive?.content?.let {
-                    doc.add(KeywordField("embed", it, Field.Store.NO))
+                    doc.add(KeywordField("embed", it, storage("embed")))
                     has.add("embed")
                 }
 
-                if (record["reply"] is JsonObject) doc.add(KeywordField("is", "reply", Field.Store.NO))
+                if (record["reply"] is JsonObject) doc.add(KeywordField("is", "reply", storage("is")))
 
                 record["facets"]?.jsonArray?.forEach { facet ->
                     listOf("did", "uri", "tag").forEach { type ->
                         facet.jsonObject[type]?.jsonPrimitive?.content?.let { value ->
-                            doc.add(KeywordField("facet_${type}", value, Field.Store.NO))
+                            doc.add(KeywordField("facet_${type}", value, storage("facet_${type}")))
                             has.add("facet_${type}")
                             has.add("facet")
                         }
@@ -186,24 +190,24 @@ class Index(
 
                 record["tags"]?.jsonArray?.forEach {
                     it.jsonPrimitive.content.let { value ->
-                        doc.add(KeywordField("tag", value, Field.Store.NO))
+                        doc.add(KeywordField("tag", value, storage("tag")))
                         has.add("tag")
                     }
                 }
 
                 record["labels"]?.jsonObject["values"]?.jsonArray?.forEach {
                     it.jsonObject["val"]?.jsonPrimitive?.content?.let { value ->
-                        doc.add(KeywordField("label", value, Field.Store.NO))
+                        doc.add(KeywordField("label", value, storage("label")))
                         has.add("label")
                     }
                 }
 
                 has.forEach {
-                    doc.add(KeywordField("has", it, Field.Store.NO))
+                    doc.add(KeywordField("has", it, storage("has")))
                 }
             } catch (e: Exception) {
                 logger.error(e) { "error indexing $value" }
-                doc.add(KeywordField("error", "error", Field.Store.YES))
+                doc.add(KeywordField("error", "error", storage("error")))
             }
 
             writer.addDocument(doc)
@@ -212,6 +216,10 @@ class Index(
         writer.commit()
         searcherManager.maybeRefresh()
         logger.info { "commit and refresh ${it.size} messages" }
+    }
+
+    private fun storage(vararg fieldName: String): Field.Store {
+        return if (fieldName.any { it in storedFields }) Field.Store.YES else Field.Store.NO
     }
 
     fun size(): String {
