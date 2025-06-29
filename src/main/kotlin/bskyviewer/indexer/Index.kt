@@ -99,7 +99,7 @@ class Index(
                 val result: MutableMap<String, Any?> = doc.groupBy(IndexableField::name) { f ->
                     f.numericValue() ?: f.stringValue()
                 }.toMutableMap()
-                listOf("did", "rkey", "createdAt").forEach { k ->
+                listOf("did", "rkey", "createdAt", "timeDebug").forEach { k ->
                     result[k] = (result[k] as? List<*>)?.first()
                 }
                 if (params.debug) {
@@ -146,6 +146,7 @@ class Index(
                 } ?: Instant.fromEpochSeconds(0).plus(value.time_us.microseconds)
                 doc.add(KeywordField("createdAt", createdAt.format(format), Field.Store.YES))
                 doc.add(SortedNumericDocValuesField("time_ms", createdAt.toEpochMilliseconds()))
+                doc.add(StoredField("timeDebug", "${value.time_us} / ${record["createdAt"]?.jsonPrimitive?.content}"))
 
                 val knownLangs = record["langs"]?.jsonArray?.mapNotNull {
                     it.jsonPrimitive.content
