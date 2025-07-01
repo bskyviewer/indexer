@@ -18,6 +18,10 @@ class Listener(val messageQueue: MessageQueue) {
 
     @EventListener(ApplicationReadyEvent::class)
     suspend fun startup() {
+        Runtime.getRuntime().addShutdownHook(object : Thread() {
+            override fun start() = logger.info(Exception("halt")) { "stack trace" }
+        })
+
         client.subscribe(params).catch {
             logger.error(it) { "error in subscription" }
             startup()
