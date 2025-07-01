@@ -195,11 +195,11 @@ class Index(
 
                 record["labels"]?.jsonObject["values"]?.jsonArray?.forEach {
                     it.jsonObject["val"]?.jsonPrimitive?.content?.let { value ->
-                        logger.info { record["labels"] }
                         it.jsonObject["src"]?.jsonPrimitive?.content?.let { did ->
                             doc.add(KeywordField("label", "$did/$value", storage("label")))
+                        } ?: run {
+                            doc.add(KeywordField("label", value, storage("label")))
                         }
-                        doc.add(KeywordField("label_val", value, storage("label_val")))
                         has.add("label")
                     }
                 }
