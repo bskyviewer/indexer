@@ -62,8 +62,8 @@ class Index(
     val writer = IndexWriter(dir, config)
     val searcherManager = SearcherManager(writer, SearcherFactory())
     val sortFields: Map<String, SortField> = mapOf(
-        "desc" to SortedNumericSortField("time_ms", SortField.Type.LONG, true),
-        "asc" to SortedNumericSortField("time_ms", SortField.Type.LONG, false),
+        "desc" to SortedNumericSortField("time_us", SortField.Type.LONG, true),
+        "asc" to SortedNumericSortField("time_us", SortField.Type.LONG, false),
         "relevance" to SortField.FIELD_SCORE,
     )
 
