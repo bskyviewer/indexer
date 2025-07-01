@@ -34,11 +34,12 @@ class Analyser : DelegatingAnalyzerWrapper(PER_FIELD_REUSE_STRATEGY) {
     }.mapValues {
         Class.forName(it.value.beanClassName).getDeclaredConstructor().newInstance() as Analyzer
     }.toMutableMap().also {
-        it["uk"] = MorfologikAnalyzer()
-        it["pl"] = PolishAnalyzer()
-        it["zh"] = SmartChineseAnalyzer()
-        it["ja"] = JapaneseAnalyzer()
-        it["ko"] = KoreanAnalyzer()
+        // Ensure analyzers not in the analysis-common jar are loaded
+        it.computeIfAbsent("uk") { MorfologikAnalyzer() }
+        it.computeIfAbsent("pl") { PolishAnalyzer() }
+        it.computeIfAbsent("zh") { SmartChineseAnalyzer() }
+        it.computeIfAbsent("ja") { JapaneseAnalyzer() }
+        it.computeIfAbsent("ko") { KoreanAnalyzer() }
     }
 
     init {
@@ -51,7 +52,7 @@ class Analyser : DelegatingAnalyzerWrapper(PER_FIELD_REUSE_STRATEGY) {
     }
 
     fun toCode(lang: String?): String? = lang?.trim()?.let {
-        if (lang in byLang) return lang
+        if (lang in byLang || lang in unseen) return lang
         if (lang == "jp") return "ja"
         val code = try {
             val locale = Locale.Builder().setLanguageTag(lang).build()
@@ -68,7 +69,7 @@ class Analyser : DelegatingAnalyzerWrapper(PER_FIELD_REUSE_STRATEGY) {
         // If specific language not found, fall back to macrolanguage (e.g nn -> no)
         val macroLangs = code?.macroLanguages()?.map(LanguageCode::code)
         val found = macroLangs?.find { it in byLang }
-        if (found == null && unseen.size < 100 && unseen.add(lang)) {
+        if (found == null && unseen.size < 1000 && unseen.add(lang)) {
             logger.info { "missing analyser for '$lang' ($code, $macroLangs)" }
         }
         found ?: code?.code()

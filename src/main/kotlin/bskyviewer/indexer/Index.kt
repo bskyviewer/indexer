@@ -9,7 +9,6 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.format
 import kotlinx.datetime.format.DateTimeComponents
 import kotlinx.datetime.format.char
-import kotlinx.datetime.toKotlinInstant
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -26,7 +25,6 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import java.io.File
 import java.nio.file.Path
-import java.time.ZonedDateTime
 import kotlin.time.Duration.Companion.microseconds
 
 private val logger = KotlinLogging.logger {}
@@ -102,7 +100,9 @@ class Index(
                     f.numericValue() ?: f.stringValue()
                 }.toMutableMap()
                 listOf("did", "rkey", "createdAt", "timeDebug").forEach { k ->
-                    result[k] = (result[k] as? List<*>)?.first()
+                    (result[k] as? List<*>)?.first()?.let { v ->
+                        result[k] = v
+                    }
                 }
                 if (params.debug) {
                     weights.add(searcher.explain(query, it.doc))
@@ -143,11 +143,9 @@ class Index(
                 val record = value.commit?.record?.value?.jsonObject ?: emptyMap()
                 val has = HashSet<String>()
 
-                val createdAt = record["createdAt"]?.jsonPrimitive?.content?.let {
-                    ZonedDateTime.parse(it).toInstant().toKotlinInstant()
-                } ?: Instant.fromEpochSeconds(0).plus(value.time_us.microseconds)
+                val createdAt = Instant.fromEpochSeconds(0).plus(value.time_us.microseconds)
                 doc.add(KeywordField("createdAt", createdAt.format(format), storage("createdAt")))
-                doc.add(SortedNumericDocValuesField("time_ms", createdAt.toEpochMilliseconds()))
+                doc.add(SortedNumericDocValuesField("time_us", value.time_us))
                 if ("timeDebug" in storedFields) doc.add(
                     StoredField("timeDebug", "${value.time_us} / ${record["createdAt"]?.jsonPrimitive?.content}")
                 )
@@ -158,7 +156,7 @@ class Index(
                     doc.add(KeywordField("lang", it, storage("lang")))
                     analyzer.toCode(it)
                 }?.toSet() ?: emptySet()
-                if (this.langs.size + knownLangs.size < 500) {
+                if (this.langs.size + knownLangs.size < 1000) {
                     this.langs.addAll(knownLangs)
                 }
                 knownLangs.forEach {
@@ -172,7 +170,7 @@ class Index(
                 }
 
                 record["embed"]?.jsonObject["\$type"]?.jsonPrimitive?.content?.let {
-                    doc.add(KeywordField("embed", it, storage("embed")))
+                    doc.add(KeywordField("embed_type", it, storage("embed_type")))
                     has.add("embed")
                 }
 
@@ -197,7 +195,11 @@ class Index(
 
                 record["labels"]?.jsonObject["values"]?.jsonArray?.forEach {
                     it.jsonObject["val"]?.jsonPrimitive?.content?.let { value ->
-                        doc.add(KeywordField("label", value, storage("label")))
+                        logger.info { record["labels"] }
+                        it.jsonObject["src"]?.jsonPrimitive?.content?.let { did ->
+                            doc.add(KeywordField("label", "$did/$value", storage("label")))
+                        }
+                        doc.add(KeywordField("label_val", value, storage("label_val")))
                         has.add("label")
                     }
                 }
