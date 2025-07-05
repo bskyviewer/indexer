@@ -22,4 +22,10 @@ class Api(val index: Index, val analyser: Analyser) {
 
     @PostMapping("/")
     fun indexer(@RequestBody params: IndexParams) = index.search(params, ::toSearchResult)
+
+    @GetMapping("/feed")
+    fun feed(params: IndexParams) = index.search(params, ::toFeedSkeleton)
+
+    @GetMapping("/feed")
+    fun feeder(@RequestBody params: IndexParams) = index.search(params, ::toFeedSkeleton)
 }
