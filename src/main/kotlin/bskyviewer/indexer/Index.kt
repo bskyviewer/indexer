@@ -1,5 +1,7 @@
 package bskyviewer.indexer
 
+import app.bsky.feed.Post
+import app.bsky.feed.PostLabelsUnion
 import app.bsky.jetstream.SubscribeMessage
 import app.bsky.jetstream.SubscribeOperation
 import bskyviewer.indexer.lucene.Analyser
@@ -10,10 +12,8 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.format
 import kotlinx.datetime.format.DateTimeComponents
 import kotlinx.datetime.format.char
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.json.decodeFromJsonElement
 import org.apache.lucene.document.*
 import org.apache.lucene.index.IndexWriter
 import org.apache.lucene.index.IndexWriterConfig
@@ -23,8 +23,11 @@ import org.apache.lucene.store.FSDirectory
 import org.apache.lucene.util.BytesRef
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
+import sh.christian.ozone.BlueskyJson
+import sh.christian.ozone.api.model.Timestamp
 import java.io.File
 import java.nio.file.Path
+import kotlin.reflect.full.findAnnotation
 import kotlin.time.Duration.Companion.microseconds
 
 private val logger = KotlinLogging.logger {}
@@ -76,8 +79,7 @@ class Index(
     }
 
     fun <T> search(
-        params: IndexParams,
-        resultMapper: (IndexSearcher, TopFieldDocs, Query?) -> T
+        params: IndexParams, resultMapper: (IndexSearcher, TopFieldDocs, Query?) -> T
     ): T {
         val searcher = searcherManager.acquire()
         try {
@@ -124,21 +126,19 @@ class Index(
                 doc.add(KeywordField("rkey", key, storage("rkey")))
                 doc.add(KeywordField("did", value.did.did, storage("did")))
 
-                val record = value.commit?.record?.value?.jsonObject ?: emptyMap()
+                val record = value.commit?.record?.value?.let { BlueskyJson.decodeFromJsonElement<Post>(it) }
                 val has = HashSet<String>()
 
-                val createdAt = Instant.fromEpochSeconds(0).plus(value.time_us.microseconds)
-                doc.add(KeywordField("createdAt", createdAt.format(format), storage("createdAt")))
-                doc.add(SortedNumericDocValuesField("time_us", value.time_us))
-                if ("timeDebug" in storedFields) doc.add(
-                    StoredField("timeDebug", "${value.time_us} / ${record["createdAt"]?.jsonPrimitive?.content}")
+                val created = minOf(
+                    Instant.fromEpochSeconds(0).plus(value.time_us.microseconds),
+                    record?.createdAt ?: Instant.DISTANT_FUTURE
                 )
+                doc.add(SortedNumericDocValuesField("time_us", toEpochMicroseconds(created)))
+                if (storage("createdAt") == Field.Store.YES) doc.add(StoredField("createdAt", created.format(format)))
 
-                val knownLangs = record["langs"]?.jsonArray?.mapNotNull {
-                    it.jsonPrimitive.content
-                }?.mapNotNull {
-                    doc.add(KeywordField("lang", it, storage("lang")))
-                    analyzer.toCode(it)
+                val knownLangs = record?.langs?.mapNotNull {
+                    doc.add(KeywordField("lang", it.tag, storage("lang")))
+                    analyzer.toCode(it.tag)
                 }?.toSet() ?: emptySet()
                 if (this.langs.size + knownLangs.size < 1000) {
                     this.langs.addAll(knownLangs)
@@ -147,45 +147,26 @@ class Index(
                     doc.add(KeywordField("known_lang", it, storage("known_lang")))
                 }
 
-                record["text"]?.jsonPrimitive?.content?.let { text ->
+                record?.text?.let { text ->
                     knownLangs.forEach { lang ->
                         doc.add(TextField("text_$lang", text, storage("text", "text_$lang")))
                     }
                 }
 
-                record["embed"]?.jsonObject["\$type"]?.jsonPrimitive?.content?.let {
+                record?.embed?.let { it::class.findAnnotation<SerialName>()?.value }?.let {
                     doc.add(KeywordField("embed_type", it, storage("embed_type")))
                     has.add("embed")
                 }
 
-                if (record["reply"] is JsonObject) doc.add(KeywordField("is", "reply", storage("is")))
+                if (record?.reply != null) doc.add(KeywordField("is", "reply", storage("is")))
 
-                record["facets"]?.jsonArray?.forEach { facet ->
-                    listOf("did", "uri", "tag").forEach { type ->
-                        facet.jsonObject[type]?.jsonPrimitive?.content?.let { value ->
-                            doc.add(KeywordField("facet_${type}", value, storage("facet_${type}")))
-                            has.add("facet_${type}")
-                            has.add("facet")
-                        }
-                    }
+                record?.tags?.forEach { value ->
+                    doc.add(KeywordField("tag", value, storage("tag")))
+                    has.add("tag")
                 }
 
-                record["tags"]?.jsonArray?.forEach {
-                    it.jsonPrimitive.content.let { value ->
-                        doc.add(KeywordField("tag", value, storage("tag")))
-                        has.add("tag")
-                    }
-                }
-
-                record["labels"]?.jsonObject["values"]?.jsonArray?.forEach {
-                    it.jsonObject["val"]?.jsonPrimitive?.content?.let { value ->
-                        it.jsonObject["src"]?.jsonPrimitive?.content?.let { did ->
-                            doc.add(KeywordField("label", "$did/$value", storage("label")))
-                        } ?: run {
-                            doc.add(KeywordField("label", value, storage("label")))
-                        }
-                        has.add("label")
-                    }
+                (record?.labels as? PostLabelsUnion.SelfLabels)?.value?.values?.forEach {
+                    doc.add(KeywordField("label", it.`val`, storage("label")))
                 }
 
                 has.forEach {
@@ -209,10 +190,7 @@ class Index(
     }
 
     fun size(): String {
-        val bytes = indexPath.toFile()
-            .walkTopDown()
-            .filter { it.isFile }
-            .sumOf(File::length)
+        val bytes = indexPath.toFile().walkTopDown().filter { it.isFile }.sumOf(File::length)
 
         return when {
             bytes >= 1 shl 30 -> "%.1f GB".format(bytes.toDouble() / (1 shl 30))
@@ -226,4 +204,12 @@ class Index(
         writer.close()
         dir.close()
     }
+}
+
+private const val MAX_SECOND = Long.MAX_VALUE / 1000000
+private fun toEpochMicroseconds(instant: Timestamp?): Long {
+    if (instant == null || instant.epochSeconds + 1 > MAX_SECOND) return Long.MAX_VALUE
+    val second = instant.epochSeconds * 1000000
+    val microsecond = instant.nanosecondsOfSecond / 1000
+    return second + microsecond
 }

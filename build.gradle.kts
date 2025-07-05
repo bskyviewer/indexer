@@ -5,6 +5,7 @@ plugins {
     kotlin("plugin.spring") version "2.1.21"
     id("org.springframework.boot") version "3.5.3"
     id("io.spring.dependency-management") version "1.1.7"
+    id("sh.christian.ozone.generator") version "0.3.3"
 }
 
 group = "bskyviewer"
@@ -21,6 +22,8 @@ repositories {
 }
 
 dependencies {
+    lexicons("sh.christian.ozone:lexicons:0.3.3")
+
     implementation("org.springframework.boot:spring-boot-starter-webflux")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("io.projectreactor.kotlin:reactor-kotlin-extensions")
@@ -45,6 +48,11 @@ dependencies {
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+lexicons.defaults {
+    generateUnknownsForSealedTypes = true
+    generateUnknownsForEnums = true
 }
 
 kotlin {
