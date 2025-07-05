@@ -68,10 +68,10 @@ tasks.withType<Test> {
 tasks.named<BootBuildImage>("bootBuildImage") {
     environment.putAll(
         mapOf(
-            "BP_JVM_VERSION" to "21",
+            "BP_JVM_VERSION" to "24",
             "BP_JVM_CDS_ENABLED" to "true",
             "BPE_DELIM_JAVA_TOOL_OPTIONS" to " ",
-            "BPE_APPEND_JAVA_TOOL_OPTIONS" to "--enable-native-access=ALL-UNNAMED --add-modules=jdk.incubator.vector -XX:MaxDirectMemorySize=40M  -XX:ReservedCodeCacheSize=80M -Xss256K",
+            "BPE_APPEND_JAVA_TOOL_OPTIONS" to "--enable-native-access=ALL-UNNAMED --add-modules=jdk.incubator.vector -XX:MaxDirectMemorySize=40M  -XX:ReservedCodeCacheSize=80M -Xss256K -XX:-ExitOnOutOfMemoryError",
         )
     )
 }
