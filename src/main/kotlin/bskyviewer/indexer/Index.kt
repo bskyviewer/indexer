@@ -71,7 +71,10 @@ class Index(
         config.setOpenMode(IndexWriterConfig.OpenMode.CREATE_OR_APPEND)
     }
 
-    fun search(params: Web.IndexParams): HashMap<String, Any> {
+    fun <T> search(
+        params: Web.IndexParams,
+        resultMapper: (IndexSearcher, TopFieldDocs, Query?) -> T
+    ): T {
         val searcher = searcherManager.acquire()
         try {
             val sort = Sort(*params.sort.map { sortFields[it] }.toTypedArray())
@@ -84,36 +87,45 @@ class Index(
             if (params.dids.isNotEmpty()) {
                 builder.add(KeywordField.newSetQuery("did", params.dids.map(::BytesRef)), BooleanClause.Occur.MUST)
             }
-            val response = HashMap<String, Any>()
             val query = builder.build()
-            val weights = ArrayList<Any>()
-            if (params.debug) {
-                response["query"] = query.toString()
-                response["weights"] = weights
-            }
             val result = searcher.search(query, params.limit, sort)
-            val storedFields = searcher.storedFields()
-            response["totalHits"] = result.totalHits
-            response["result"] = result.scoreDocs.map {
-                val doc = storedFields.document(it.doc)
-                val result: MutableMap<String, Any?> = doc.groupBy(IndexableField::name) { f ->
-                    f.numericValue() ?: f.stringValue()
-                }.toMutableMap()
-                listOf("did", "rkey", "createdAt", "timeDebug").forEach { k ->
-                    (result[k] as? List<*>)?.first()?.let { v ->
-                        result[k] = v
-                    }
-                }
-                if (params.debug) {
-                    weights.add(searcher.explain(query, it.doc))
-                }
-                result
-            }
-
-            return response
+            return resultMapper(searcher, result, query)
         } finally {
             searcherManager.release(searcher)
         }
+    }
+
+    fun asMap(
+        searcher: IndexSearcher,
+        result: TopFieldDocs,
+        query: Query?
+    ): HashMap<String, Any> {
+        val response = HashMap<String, Any>()
+        val weights = ArrayList<Any>()
+        val storedFields = searcher.storedFields()
+        response["totalHits"] = result.totalHits
+        response["result"] = result.scoreDocs.map {
+            val doc = storedFields.document(it.doc)
+            val result: MutableMap<String, Any?> = doc.groupBy(IndexableField::name) { f ->
+                f.numericValue() ?: f.stringValue()
+            }.toMutableMap()
+            listOf("did", "rkey", "createdAt", "timeDebug").forEach { k ->
+                (result[k] as? List<*>)?.first()?.let { v ->
+                    result[k] = v
+                }
+            }
+            query?.let { q ->
+                weights.add(searcher.explain(q, it.doc))
+            }
+            result
+        }
+
+        query?.let { q ->
+            response["query"] = q.toString()
+            response["weights"] = weights
+        }
+
+        return response
     }
 
     fun index(it: List<SubscribeMessage>) {

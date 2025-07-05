@@ -25,8 +25,8 @@ class Web(val index: Index, val analyser: Analyser) {
     )
 
     @GetMapping("/")
-    fun index(params: IndexParams) = index.search(params)
+    fun index(params: IndexParams) = index.search(params, index::asMap)
 
     @PostMapping("/")
-    fun indexer(@RequestBody params: IndexParams) = index.search(params)
+    fun indexer(@RequestBody params: IndexParams) = index.search(params, index::asMap)
 }
