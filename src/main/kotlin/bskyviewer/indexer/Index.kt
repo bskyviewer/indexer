@@ -171,7 +171,8 @@ class Index(
                     has.add("embed")
                 }
 
-                if (record?.reply != null) doc.add(KeywordField("is", "reply", storage("is")))
+                val type = if (record?.reply != null) "reply" else "post"
+                doc.add(KeywordField("is", type, storage("is")))
 
                 record?.tags?.forEach { value ->
                     doc.add(KeywordField("tag", value, storage("tag")))
