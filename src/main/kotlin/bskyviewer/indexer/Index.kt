@@ -24,7 +24,6 @@ import org.apache.lucene.util.BytesRef
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import java.io.File
-import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.time.Duration.Companion.microseconds
 
@@ -93,8 +92,9 @@ class Index(
                 builder.add(KeywordField.newSetQuery("did", params.dids.map(::BytesRef)), BooleanClause.Occur.MUST)
             }
             val query = builder.build()
-            val result = searcher.search(query, params.limit, sort)
-            return resultMapper(searcher, result, query)
+            val limit = if (params.limit > 0) params.limit else searcher.indexReader.maxDoc()
+            val result = searcher.search(query, limit, sort)
+            return resultMapper(searcher, result, if (params.debug) query else null)
         } finally {
             searcherManager.release(searcher)
         }
