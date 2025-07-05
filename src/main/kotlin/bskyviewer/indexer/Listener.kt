@@ -23,12 +23,14 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 private val logger = KotlinLogging.logger {}
 const val offset = 100000L
+val wantedCollections = listOf(Nsid("app.bsky.feed.post"))
 
 @Component
 @Profile("!test")
 @OptIn(ExperimentalAtomicApi::class)
 class Listener(
-    @Value("\${indexer.fetch-history}") val history: Duration?,
+    @Value("\${indexer.jetstream-compression}") val compress: Boolean,
+    @Value("\${indexer.jetstream-history}") val history: Duration?,
     @Value("\${indexer.buffer-duration}") val bufferDuration: Duration,
     @Value("\${indexer.buffer-capacity}") val bufferSize: Int,
     @Value("\${indexer.buffer-wakeness}") val bufferWake: Int,
@@ -92,8 +94,8 @@ class Listener(
         var skipped = 0
         client.subscribe(
             SubscribeQueryParams(
-                wantedCollections = listOf(Nsid("app.bsky.feed.post")),
-                compress = true,
+                wantedCollections = wantedCollections,
+                compress = compress,
                 cursor = cursor?.minus(offset),
                 maxMessageSizeBytes = 50000
             )
