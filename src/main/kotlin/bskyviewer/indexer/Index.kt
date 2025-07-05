@@ -24,9 +24,9 @@ import org.apache.lucene.util.BytesRef
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import sh.christian.ozone.BlueskyJson
-import sh.christian.ozone.api.model.Timestamp
 import java.io.File
 import java.nio.file.Path
+import kotlin.math.min
 import kotlin.reflect.full.findAnnotation
 import kotlin.time.Duration.Companion.microseconds
 
@@ -90,6 +90,19 @@ class Index(
             } else {
                 builder.add(MatchAllDocsQuery(), BooleanClause.Occur.SHOULD)
             }
+            if (params.before != null || params.after != null) {
+                var min = params.after?.toMicros() ?: Long.MIN_VALUE
+                var max = params.before?.toMicros() ?: Long.MAX_VALUE
+                if (min > Long.MIN_VALUE) min -= 1
+                if (max < Long.MAX_VALUE) max += 1
+                builder.add(
+                    IndexOrDocValuesQuery(
+                        LongPoint.newRangeQuery("created", min, max),
+                        SortedNumericDocValuesField.newSlowRangeQuery("time_us", min, max)
+                    ),
+                    BooleanClause.Occur.MUST
+                )
+            }
             if (params.dids.isNotEmpty()) {
                 builder.add(KeywordField.newSetQuery("did", params.dids.map(::BytesRef)), BooleanClause.Occur.MUST)
             }
@@ -129,12 +142,12 @@ class Index(
                 val record = value.commit?.record?.value?.let { BlueskyJson.decodeFromJsonElement<Post>(it) }
                 val has = HashSet<String>()
 
-                val created = minOf(
-                    Instant.fromEpochSeconds(0).plus(value.time_us.microseconds),
-                    record?.createdAt ?: Instant.DISTANT_FUTURE
+                val created = min(value.time_us, record?.createdAt?.toMicros() ?: Long.MAX_VALUE)
+                doc.add(SortedNumericDocValuesField("time_us", created))
+                doc.add(LongPoint("created", created))
+                if (storage("createdAt") == Field.Store.YES) doc.add(
+                    StoredField("createdAt", created.micros().format(format))
                 )
-                doc.add(SortedNumericDocValuesField("time_us", toEpochMicroseconds(created)))
-                if (storage("createdAt") == Field.Store.YES) doc.add(StoredField("createdAt", created.format(format)))
 
                 val knownLangs = record?.langs?.mapNotNull {
                     doc.add(KeywordField("lang", it.tag, storage("lang")))
@@ -206,10 +219,19 @@ class Index(
     }
 }
 
+private fun Long.micros(): Instant = Instant.fromEpochSeconds(0).plus(microseconds)
+
 private const val MAX_SECOND = Long.MAX_VALUE / 1000000
-private fun toEpochMicroseconds(instant: Timestamp?): Long {
-    if (instant == null || instant.epochSeconds + 1 > MAX_SECOND) return Long.MAX_VALUE
-    val second = instant.epochSeconds * 1000000
-    val microsecond = instant.nanosecondsOfSecond / 1000
+private fun Instant.toMicros(): Long {
+    if (epochSeconds + 1 > MAX_SECOND) return Long.MAX_VALUE
+    val second = epochSeconds * 1000000
+    val microsecond = nanosecondsOfSecond / 1000
+    return second + microsecond
+}
+
+private fun java.time.Instant.toMicros(): Long {
+    if (epochSecond + 1 > MAX_SECOND) return Long.MAX_VALUE
+    val second = epochSecond * 1000000
+    val microsecond = nano / 1000
     return second + microsecond
 }
