@@ -5,10 +5,11 @@ import app.bsky.feed.PostLabelsUnion
 import app.bsky.jetstream.SubscribeMessage
 import app.bsky.jetstream.SubscribeOperation
 import bskyviewer.indexer.lucene.Analyser
+import bskyviewer.indexer.util.micros
+import bskyviewer.indexer.util.toMicros
 import bskyviewer.indexer.web.IndexParams
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.util.collections.*
-import kotlinx.datetime.Instant
 import kotlinx.datetime.format
 import kotlinx.datetime.format.DateTimeComponents
 import kotlinx.datetime.format.char
@@ -28,7 +29,6 @@ import java.io.File
 import java.nio.file.Path
 import kotlin.math.min
 import kotlin.reflect.full.findAnnotation
-import kotlin.time.Duration.Companion.microseconds
 
 private val logger = KotlinLogging.logger {}
 private val format = DateTimeComponents.Format {
@@ -192,10 +192,10 @@ class Index(
 
             writer.addDocument(doc)
         }
-        logger.info { "done indexing ${it.size} messages" }
+        logger.trace { "done indexing ${it.size} messages" }
         writer.commit()
         searcherManager.maybeRefresh()
-        logger.info { "commit and refresh ${it.size} messages" }
+        logger.trace { "commit and refresh ${it.size} messages" }
     }
 
     private fun storage(vararg fieldName: String): Field.Store {
@@ -219,19 +219,3 @@ class Index(
     }
 }
 
-private fun Long.micros(): Instant = Instant.fromEpochSeconds(0).plus(microseconds)
-
-private const val MAX_SECOND = Long.MAX_VALUE / 1000000
-private fun Instant.toMicros(): Long {
-    if (epochSeconds + 1 > MAX_SECOND) return Long.MAX_VALUE
-    val second = epochSeconds * 1000000
-    val microsecond = nanosecondsOfSecond / 1000
-    return second + microsecond
-}
-
-private fun java.time.Instant.toMicros(): Long {
-    if (epochSecond + 1 > MAX_SECOND) return Long.MAX_VALUE
-    val second = epochSecond * 1000000
-    val microsecond = nano / 1000
-    return second + microsecond
-}
