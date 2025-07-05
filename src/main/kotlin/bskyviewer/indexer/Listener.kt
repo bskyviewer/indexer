@@ -4,6 +4,7 @@ import app.bsky.jetstream.SubscribeQueryParams
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.flow.catch
 import org.springframework.boot.context.event.ApplicationReadyEvent
+import org.springframework.context.annotation.Profile
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
 import sh.christian.ozone.api.Nsid
@@ -13,6 +14,7 @@ private val logger = KotlinLogging.logger {}
 val params = SubscribeQueryParams(wantedCollections = listOf(Nsid("app.bsky.feed.post")))
 
 @Component
+@Profile("!test")
 class Listener(val messageQueue: MessageQueue) {
     val client = JetstreamApi()
 

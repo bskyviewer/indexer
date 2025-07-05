@@ -3,6 +3,7 @@ package bskyviewer.indexer
 import app.bsky.jetstream.SubscribeMessage
 import app.bsky.jetstream.SubscribeOperation
 import bskyviewer.indexer.lucene.Analyser
+import bskyviewer.indexer.web.IndexParams
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.util.collections.*
 import kotlinx.datetime.Instant
@@ -16,7 +17,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.apache.lucene.document.*
 import org.apache.lucene.index.IndexWriter
 import org.apache.lucene.index.IndexWriterConfig
-import org.apache.lucene.index.IndexableField
 import org.apache.lucene.queryparser.classic.QueryParser
 import org.apache.lucene.search.*
 import org.apache.lucene.store.FSDirectory
@@ -24,6 +24,7 @@ import org.apache.lucene.util.BytesRef
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import java.io.File
+import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.time.Duration.Companion.microseconds
 
@@ -49,9 +50,13 @@ private val format = DateTimeComponents.Format {
 class Index(
     val analyzer: Analyser,
     @Value("\${indexer.lucene-ram-limit}") val memoryLimit: Int,
-    @Value("\${indexer.lucene-index-dir:/tmp/index}") val indexPath: Path,
+    @Value("\${indexer.lucene-index-dir:#{T(java.nio.file.Files).createTempDirectory('index')}}") val indexPath: Path,
     @Value("\${indexer.stored-fields}") val storedFields: List<String>
 ) : AutoCloseable {
+
+    init {
+        logger.info { "creating index in $indexPath" }
+    }
 
     val langs = ConcurrentSet<String>()
     val dir: FSDirectory = FSDirectory.open(indexPath)
@@ -72,7 +77,7 @@ class Index(
     }
 
     fun <T> search(
-        params: Web.IndexParams,
+        params: IndexParams,
         resultMapper: (IndexSearcher, TopFieldDocs, Query?) -> T
     ): T {
         val searcher = searcherManager.acquire()
@@ -93,39 +98,6 @@ class Index(
         } finally {
             searcherManager.release(searcher)
         }
-    }
-
-    fun asMap(
-        searcher: IndexSearcher,
-        result: TopFieldDocs,
-        query: Query?
-    ): HashMap<String, Any> {
-        val response = HashMap<String, Any>()
-        val weights = ArrayList<Any>()
-        val storedFields = searcher.storedFields()
-        response["totalHits"] = result.totalHits
-        response["result"] = result.scoreDocs.map {
-            val doc = storedFields.document(it.doc)
-            val result: MutableMap<String, Any?> = doc.groupBy(IndexableField::name) { f ->
-                f.numericValue() ?: f.stringValue()
-            }.toMutableMap()
-            listOf("did", "rkey", "createdAt", "timeDebug").forEach { k ->
-                (result[k] as? List<*>)?.first()?.let { v ->
-                    result[k] = v
-                }
-            }
-            query?.let { q ->
-                weights.add(searcher.explain(q, it.doc))
-            }
-            result
-        }
-
-        query?.let { q ->
-            response["query"] = q.toString()
-            response["weights"] = weights
-        }
-
-        return response
     }
 
     fun index(it: List<SubscribeMessage>) {
