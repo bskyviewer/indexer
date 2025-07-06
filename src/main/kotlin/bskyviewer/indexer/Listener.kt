@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.time.delay
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.boot.context.event.ApplicationReadyEvent
+import org.springframework.boot.context.event.ApplicationStartedEvent
 import org.springframework.context.annotation.Profile
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
@@ -42,7 +42,7 @@ class Listener(
     var sleeping: Job? = null
     var running = true
 
-    @EventListener(ApplicationReadyEvent::class)
+    @EventListener(ApplicationStartedEvent::class)
     suspend fun startup() = coroutineScope {
         Runtime.getRuntime().addShutdownHook(object : Thread() {
             override fun start() = logger.info(Exception("halt")) { "stack trace" }
