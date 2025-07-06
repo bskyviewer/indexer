@@ -62,10 +62,10 @@ class Index(
     }
 
     val langs = ConcurrentSet<String>()
-    val config = IndexWriterConfig(analyzer).also {
+    var parser = QueryParser("text_en", analyzer)
+    var config = IndexWriterConfig(analyzer).also {
         it.ramPerThreadHardLimitMB = memoryLimit
     }
-    var parser = QueryParser("text_en", analyzer)
     var dir: FSDirectory = FSDirectory.open(indexPath)
     var writer = IndexWriter(dir, config)
     var searcherManager = SearcherManager(writer, SearcherFactory())
@@ -79,7 +79,10 @@ class Index(
         config.setOpenMode(IndexWriterConfig.OpenMode.CREATE_OR_APPEND)
     }
 
-    private fun reinit() {
+    private fun reinit(limit: Int) {
+        config = IndexWriterConfig(analyzer).also {
+            it.ramPerThreadHardLimitMB = limit
+        }
         dir = FSDirectory.open(indexPath)
         writer = IndexWriter(dir, config)
         searcherManager = SearcherManager(writer, SearcherFactory())
@@ -219,13 +222,12 @@ class Index(
     } catch (e: OutOfMemoryError) {
         val limit = max(config.ramPerThreadHardLimitMB * 10 / 9, 10)
         logger.info { "out of memory, reducing ram limit to ${limit}MB" }
-        config.ramPerThreadHardLimitMB = limit
         writer.rollback()
-        reinit()
+        reinit(limit)
         throw e
     } catch (e: Throwable) {
         writer.rollback()
-        reinit()
+        reinit(config.ramPerThreadHardLimitMB)
         throw e
     }
 
