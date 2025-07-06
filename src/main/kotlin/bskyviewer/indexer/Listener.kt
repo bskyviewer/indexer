@@ -18,7 +18,6 @@ import sh.christian.ozone.api.Nsid
 import sh.christian.ozone.jetstream.JetstreamApi
 import java.time.Duration
 import java.time.Instant
-import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 private val logger = KotlinLogging.logger {}
@@ -38,7 +37,7 @@ class Listener(
 ) :
     AutoCloseable {
     val client = JetstreamApi()
-    val buffer = AtomicReference(ArrayList<SubscribeMessage>(bufferSize))
+    var buffer = ArrayList<SubscribeMessage>(bufferSize)
     var cursor: Long? = history?.let { Instant.now().minus(it).toMicros() } ?: offset
     var sleeping: Job? = null
     var running = true
@@ -75,7 +74,10 @@ class Listener(
                         subscription.onJoin { logger.trace { "subscription ended, stopping sleep" } }
                     }
                 }
-                val buf = buffer.exchange(ArrayList(bufferSize))
+                val buf = syncBuffer {
+                    buffer = ArrayList(bufferSize)
+                    it
+                }
                 if (buf.isNotEmpty()) {
                     indexing = launch(Dispatchers.Default) {
                         logger.trace { "indexing $loop" }
@@ -126,12 +128,10 @@ class Listener(
         return false
     }
 
-    fun <T> syncBuffer(block: (buf: ArrayList<SubscribeMessage>) -> T): T {
-        val buf = buffer.load()
-        synchronized(buf) {
-            return block(buf)
-        }
+    fun <T> syncBuffer(block: (buf: ArrayList<SubscribeMessage>) -> T): T = synchronized(this) {
+        block(buffer)
     }
+
 
     override fun close() {
         running = false
