@@ -27,6 +27,7 @@ import org.springframework.stereotype.Component
 import sh.christian.ozone.BlueskyJson
 import java.io.File
 import java.nio.file.Path
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.reflect.full.findAnnotation
 
@@ -120,7 +121,6 @@ class Index(
     }
 
     fun index(it: List<SubscribeMessage>) = try {
-        logger.info { "indexing ${it.size} messages" }
         val created = HashMap<String, SubscribeMessage>()
         val deleted = ArrayList<String>()
         it.forEach {
@@ -166,7 +166,11 @@ class Index(
 
                 record?.text?.let { text ->
                     knownLangs.forEach { lang ->
-                        doc.add(TextField("text_$lang", text, storage("text", "text_$lang")))
+                        try {
+                            doc.add(TextField("text_$lang", text, storage("text", "text_$lang")))
+                        } catch (e: Throwable) {
+                            logger.error(e) { "error indexing $lang text: $text" }
+                        }
                     }
                 }
 
@@ -202,8 +206,10 @@ class Index(
         searcherManager.maybeRefresh()
         logger.trace { "commit and refresh ${it.size} messages" }
     } catch (e: OutOfMemoryError) {
-        config.ramPerThreadHardLimitMB = config.ramPerThreadHardLimitMB * 100 / 9
-        logger.error(e) { "out of memory, reducing ram limit to ${config.ramPerThreadHardLimitMB}MB" }
+        val limit = max(config.ramPerThreadHardLimitMB * 10 / 9, 10)
+        logger.info { "out of memory, reducing ram limit to ${limit}MB" }
+        config.ramPerThreadHardLimitMB = limit
+        throw e
     }
 
     private fun storage(vararg fieldName: String): Field.Store {

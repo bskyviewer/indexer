@@ -68,7 +68,7 @@ class Listener(
                 indexing?.join()
                 indexing = null
                 val wait = Duration.between(Instant.now(), nextRun)
-                if (wait.isPositive && buffer.load().size < bufferWake) {
+                if (wait.isPositive && syncBuffer { it.size } < bufferWake) {
                     sleeping = launch { delay(wait) }
                     select {
                         sleeping?.onJoin { logger.trace { "slept $wait" } }
@@ -77,10 +77,16 @@ class Listener(
                 }
                 val buf = buffer.exchange(ArrayList(bufferSize))
                 if (buf.isNotEmpty()) {
-                    indexing = launch(Dispatchers.Default) {
-                        logger.trace { "indexing $loop" }
-                        index.index(buf)
-                        logger.trace { "indexing done $loop" }
+                    indexing = launch (Dispatchers.Default) {
+                        try {
+                            logger.trace { "indexing $loop" }
+                            index.index(buf)
+                            logger.trace { "indexing done $loop" }
+                            cursor = buf.maxOf { message -> message.time_us }
+                            logger.info { "indexed ${buf.size} messages, cursor is $cursor" }
+                        } catch (e: Throwable) {
+                            logger.error(e) { "error indexing, returning ${buf.size} messages to buffer" }
+                        }
                     }
                 }
                 nextRun = Instant.now().plus(bufferDuration)
@@ -107,7 +113,7 @@ class Listener(
                     logger.info { "skipped $skipped messages" }
                     skipped = -1
                 }
-                buffer.load().add(it)
+                syncBuffer { buf -> buf.add(it) }
             } else {
                 if (skipped++ > 0 && skipped % 1000 == 0) logger.info { "skipped $skipped messages" }
             }
@@ -115,14 +121,20 @@ class Listener(
     }
 
     fun hasBufferSpace(message: SubscribeMessage): Boolean {
-        val count = buffer.load().size
+        val count = syncBuffer { it.size }
         if (count < bufferSize) {
             if (count >= bufferWake) this.sleeping?.cancel()
             return true
         }
-        cursor = message.time_us
-        logger.info { "buffer full, cursor is ${cursor?.micros()}" }
+        logger.info { "buffer full, cursor ${message.time_us.micros()}" }
         return false
+    }
+
+    fun <T> syncBuffer(block: (buf: ArrayList<SubscribeMessage>) -> T): T {
+        val buf = buffer.load()
+        synchronized(buf) {
+            return block(buf)
+        }
     }
 
     override fun close() {
