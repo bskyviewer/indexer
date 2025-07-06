@@ -21,7 +21,7 @@ import java.time.Instant
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
 private val logger = KotlinLogging.logger {}
-const val offset = 100000L
+const val offset = 1000L
 val wantedCollections = listOf(Nsid("app.bsky.feed.post"))
 
 @Component
@@ -78,13 +78,14 @@ class Listener(
                     buffer = ArrayList(bufferSize)
                     it
                 }
+                cursor?.let { c -> buf.removeIf { m -> m.time_us <= c } }
                 if (buf.isNotEmpty()) {
                     indexing = launch(Dispatchers.Default) {
                         logger.trace { "indexing $loop" }
                         index.index(buf)
                         logger.trace { "indexing done $loop" }
-                        cursor = buf.maxOf { message -> message.time_us }
-                        logger.info { "indexed ${buf.size} messages, cursor is ${cursor?.micros()}" }
+                        val time = buf.maxOf { message -> message.time_us }.micros()
+                        logger.info { "indexed ${buf.size} messages to $time" }
                     }
                 }
                 nextRun = Instant.now().plus(bufferDuration)
@@ -113,6 +114,7 @@ class Listener(
                 }
                 syncBuffer { buf -> buf.add(it) }
             } else {
+                if (skipped < 0) skipped = 0
                 if (skipped++ > 0 && skipped % 1000 == 0) logger.info { "skipped $skipped messages" }
             }
         }
@@ -124,6 +126,7 @@ class Listener(
             if (count >= bufferWake) this.sleeping?.cancel()
             return true
         }
+        cursor = message.time_us
         logger.info { "buffer full, cursor ${message.time_us.micros()}" }
         return false
     }
