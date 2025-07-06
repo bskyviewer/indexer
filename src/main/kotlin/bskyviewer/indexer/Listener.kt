@@ -52,7 +52,7 @@ class Listener(
         var indexing: Job? = null
         var i = 0
 
-        while (running) {
+        while (running) try {
             val loop = i
             val subscription = launch(Dispatchers.IO) {
                 logger.trace { "starting subscription ${i++}" }
@@ -87,6 +87,8 @@ class Listener(
             }
             // if we reached here due to !running, close the websocket
             subscription.cancelAndJoin()
+        } catch (e: Throwable) {
+            logger.error(e) { "error in listener loop" }
         }
     }
 
