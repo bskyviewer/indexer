@@ -77,16 +77,12 @@ class Listener(
                 }
                 val buf = buffer.exchange(ArrayList(bufferSize))
                 if (buf.isNotEmpty()) {
-                    indexing = launch (Dispatchers.Default) {
-                        try {
-                            logger.trace { "indexing $loop" }
-                            index.index(buf)
-                            logger.trace { "indexing done $loop" }
-                            cursor = buf.maxOf { message -> message.time_us }
-                            logger.info { "indexed ${buf.size} messages, cursor is ${cursor?.micros()}" }
-                        } catch (e: Throwable) {
-                            logger.error(e) { "error indexing, returning ${buf.size} messages to buffer" }
-                        }
+                    indexing = launch(Dispatchers.Default) {
+                        logger.trace { "indexing $loop" }
+                        index.index(buf)
+                        logger.trace { "indexing done $loop" }
+                        cursor = buf.maxOf { message -> message.time_us }
+                        logger.info { "indexed ${buf.size} messages, cursor is ${cursor?.micros()}" }
                     }
                 }
                 nextRun = Instant.now().plus(bufferDuration)

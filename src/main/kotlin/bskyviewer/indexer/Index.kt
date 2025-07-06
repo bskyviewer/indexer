@@ -62,14 +62,14 @@ class Index(
     }
 
     val langs = ConcurrentSet<String>()
-    val dir: FSDirectory = FSDirectory.open(indexPath)
     val config = IndexWriterConfig(analyzer).also {
         it.ramPerThreadHardLimitMB = memoryLimit
     }
     var parser = QueryParser("text_en", analyzer)
-    val writer = IndexWriter(dir, config)
-    val searcherManager = SearcherManager(writer, SearcherFactory())
-    val sortFields: Map<String, SortField> = mapOf(
+    var dir: FSDirectory = FSDirectory.open(indexPath)
+    var writer = IndexWriter(dir, config)
+    var searcherManager = SearcherManager(writer, SearcherFactory())
+    var sortFields: Map<String, SortField> = mapOf(
         "desc" to SortedNumericSortField("time_us", SortField.Type.LONG, true),
         "asc" to SortedNumericSortField("time_us", SortField.Type.LONG, false),
         "relevance" to SortField.FIELD_SCORE,
@@ -77,6 +77,17 @@ class Index(
 
     init {
         config.setOpenMode(IndexWriterConfig.OpenMode.CREATE_OR_APPEND)
+    }
+
+    private fun reinit() {
+        dir = FSDirectory.open(indexPath)
+        writer = IndexWriter(dir, config)
+        searcherManager = SearcherManager(writer, SearcherFactory())
+        sortFields = mapOf(
+            "desc" to SortedNumericSortField("time_us", SortField.Type.LONG, true),
+            "asc" to SortedNumericSortField("time_us", SortField.Type.LONG, false),
+            "relevance" to SortField.FIELD_SCORE,
+        )
     }
 
     fun <T> search(
@@ -209,6 +220,12 @@ class Index(
         val limit = max(config.ramPerThreadHardLimitMB * 10 / 9, 10)
         logger.info { "out of memory, reducing ram limit to ${limit}MB" }
         config.ramPerThreadHardLimitMB = limit
+        writer.rollback()
+        reinit()
+        throw e
+    } catch (e: Throwable) {
+        writer.rollback()
+        reinit()
         throw e
     }
 
