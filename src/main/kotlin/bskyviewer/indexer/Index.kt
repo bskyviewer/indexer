@@ -110,12 +110,16 @@ class Index(
             val limit = if (params.limit > 0) params.limit else searcher.indexReader.maxDoc()
             val result = searcher.search(query, limit, sort)
             return resultMapper(searcher, result, if (params.debug) query else null)
+        } catch (e: OutOfMemoryError) {
+            config.ramPerThreadHardLimitMB = config.ramPerThreadHardLimitMB * 100 / 9
+            logger.error(e) { "out of memory, reducing ram limit to ${config.ramPerThreadHardLimitMB}MB" }
+            throw e
         } finally {
             searcherManager.release(searcher)
         }
     }
 
-    fun index(it: List<SubscribeMessage>) {
+    fun index(it: List<SubscribeMessage>) = try {
         logger.info { "indexing ${it.size} messages" }
         val created = HashMap<String, SubscribeMessage>()
         val deleted = ArrayList<String>()
@@ -197,6 +201,9 @@ class Index(
         writer.commit()
         searcherManager.maybeRefresh()
         logger.trace { "commit and refresh ${it.size} messages" }
+    } catch (e: OutOfMemoryError) {
+        config.ramPerThreadHardLimitMB = config.ramPerThreadHardLimitMB * 100 / 9
+        logger.error(e) { "out of memory, reducing ram limit to ${config.ramPerThreadHardLimitMB}MB" }
     }
 
     private fun storage(vararg fieldName: String): Field.Store {
