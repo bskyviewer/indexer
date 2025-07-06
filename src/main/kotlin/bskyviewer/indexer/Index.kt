@@ -212,7 +212,11 @@ class Index(
             try {
                 writer.addDocument(doc)
             } catch (e: Throwable) {
-                logger.error(e) { "error indexing $value" }
+                if (writer.isOpen) {
+                    logger.error(e) { "recoverable error indexing $value" }
+                } else {
+                    throw e
+                }
             }
         }
         logger.trace { "done indexing ${it.size} messages" }
