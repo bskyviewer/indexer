@@ -180,11 +180,7 @@ class Index(
 
                 record?.text?.let { text ->
                     knownLangs.forEach { lang ->
-                        try {
-                            doc.add(TextField("text_$lang", text, storage("text", "text_$lang")))
-                        } catch (e: Throwable) {
-                            logger.error(e) { "error indexing $lang text: $text" }
-                        }
+                        doc.add(TextField("text_$lang", text, storage("text", "text_$lang")))
                     }
                 }
 
@@ -213,7 +209,11 @@ class Index(
                 doc.add(KeywordField("error", "error", storage("error")))
             }
 
-            writer.addDocument(doc)
+            try {
+                writer.addDocument(doc)
+            } catch (e: Throwable) {
+                logger.error(e) { "error indexing $value" }
+            }
         }
         logger.trace { "done indexing ${it.size} messages" }
         writer.commit()
