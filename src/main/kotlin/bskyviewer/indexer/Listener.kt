@@ -78,7 +78,6 @@ class Listener(
                     buffer = ArrayList(bufferSize)
                     it
                 }
-                cursor?.let { c -> buf.removeIf { m -> m.time_us <= c } }
                 if (buf.isNotEmpty()) {
                     indexing = launch(Dispatchers.Default) {
                         logger.trace { "indexing $loop" }
@@ -113,9 +112,8 @@ class Listener(
                     skipped = -1
                 }
                 syncBuffer { buf -> buf.add(it) }
-            } else {
-                if (skipped < 0) skipped = 0
-                if (skipped++ > 0 && skipped % 1000 == 0) logger.info { "skipped $skipped messages" }
+            } else if (skipped++ < 0) {
+                skipped = 1
             }
         }
     }
@@ -127,7 +125,7 @@ class Listener(
             return true
         }
         cursor = message.time_us
-        logger.info { "buffer full, cursor ${message.time_us.micros()}" }
+        logger.info { "buffer full ($count), cursor ${message.time_us.micros()}" }
         return false
     }
 
