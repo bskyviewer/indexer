@@ -6,6 +6,7 @@ import bskyviewer.indexer.util.micros
 import bskyviewer.indexer.util.toMicros
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.time.delay
@@ -98,14 +99,7 @@ class Listener(
 
     private suspend fun subscribe() {
         var skipped = 0
-        client.subscribe(
-            SubscribeQueryParams(
-                wantedCollections = wantedCollections,
-                compress = compress,
-                cursor = cursor?.minus(offset),
-                maxMessageSizeBytes = 50000
-            )
-        ).takeWhile { hasBufferSpace(it) }.collect {
+        connect().takeWhile { hasBufferSpace(it) }.collect {
             if (it.time_us >= (cursor ?: 0)) {
                 if (skipped >= 0) {
                     logger.info { "skipped $skipped messages" }
@@ -114,6 +108,26 @@ class Listener(
                 syncBuffer { buf -> buf.add(it) }
             } else if (skipped++ < 0) {
                 skipped = 1
+            }
+        }
+    }
+
+    private suspend fun connect(): Flow<SubscribeMessage> {
+        var backOff = Duration.ofMillis(500)
+        while (true) {
+            try {
+                return client.subscribe(
+                    SubscribeQueryParams(
+                        wantedCollections = wantedCollections,
+                        compress = compress,
+                        cursor = cursor?.minus(offset),
+                        maxMessageSizeBytes = 50000
+                    )
+                )
+            } catch (e: Exception) {
+                logger.error(e) { "error connecting to jetstream" }
+                delay(backOff)
+                backOff = backOff.plus(backOff)
             }
         }
     }
