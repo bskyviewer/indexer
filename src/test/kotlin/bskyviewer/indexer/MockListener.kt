@@ -31,7 +31,7 @@ class MockListener(val index: Index) {
 
         logger.info { "Loaded ${messages.size} messages from test data" }
 
-        index.index(messages)
+        index.index(messages, true)
 
         logger.info { "Finished processing test data" }
     }

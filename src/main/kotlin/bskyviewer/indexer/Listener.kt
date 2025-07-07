@@ -82,7 +82,16 @@ class Listener(
                 if (buf.isNotEmpty()) {
                     indexing = launch(Dispatchers.Default) {
                         logger.trace { "indexing $loop" }
-                        index.index(buf)
+                        try {
+                            index.index(buf, true)
+                        } catch (e: Exception) {
+                            logger.warn(e) {
+                                "retrying without full text. messages: ${
+                                    buf.joinToString("\n") { "${it.did}/${it.commit?.rkey}" }
+                                }"
+                            }
+                            index.index(buf, false)
+                        }
                         logger.trace { "indexing done $loop" }
                         val time = buf.maxOf { message -> message.time_us }.micros()
                         logger.info { "indexed ${buf.size} messages to $time" }

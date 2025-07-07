@@ -134,7 +134,7 @@ class Index(
         }
     }
 
-    fun index(it: List<SubscribeMessage>) = try {
+    fun index(it: List<SubscribeMessage>, fulltext: Boolean) = try {
         val created = HashMap<String, SubscribeMessage>()
         val deleted = ArrayList<String>()
         it.forEach {
@@ -178,7 +178,7 @@ class Index(
                     doc.add(KeywordField("known_lang", it, storage("known_lang")))
                 }
 
-                record?.text?.let { text ->
+                if (fulltext) record?.text?.let { text ->
                     knownLangs.forEach { lang ->
                         doc.add(TextField("text_$lang", text, storage("text", "text_$lang")))
                     }
