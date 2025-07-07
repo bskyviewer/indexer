@@ -65,7 +65,11 @@ class Listener(
             // The next buffer will start loading, to be processed after the currently running indexing task ends.
             var nextRun = Instant.now().plus(bufferDuration)
             while (running && subscription.isActive) {
-                indexing?.join()
+                try {
+                    indexing?.join()
+                } catch (e: CancellationException) {
+                    logger.info(e) { "ignoring cancellation" }
+                }
                 indexing = null
                 val wait = Duration.between(Instant.now(), nextRun)
                 if (wait.isPositive && syncBuffer { it.size } < bufferWake) {
@@ -84,7 +88,7 @@ class Listener(
                         logger.trace { "indexing $loop" }
                         try {
                             index.index(buf, true)
-                        } catch (e: Exception) {
+                        } catch (e: Throwable) {
                             logger.warn(e) {
                                 "retrying without full text. messages: ${
                                     buf.joinToString("\n") { "${it.did}/${it.commit?.rkey}" }
