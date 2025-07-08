@@ -103,8 +103,7 @@ class Listener(
                 }
                 nextRun = Instant.now().plus(bufferDuration)
             }
-            // if we reached here due to !running, close the websocket
-            subscription.cancelAndJoin()
+            if (!running) subscription.cancel("shutting down")
         } catch (e: Throwable) {
             logger.error(e) { "error in listener loop" }
         }
