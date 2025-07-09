@@ -103,7 +103,11 @@ class Listener(
                 }
                 nextRun = Instant.now().plus(bufferDuration)
             }
-            if (!running) subscription.cancel("shutting down")
+            try {
+                subscription.cancelAndJoin()
+            } catch (e: CancellationException) {
+                logger.trace(e) { "subscription canceled" }
+            }
         } catch (e: Throwable) {
             logger.error(e) { "error in listener loop" }
         }
