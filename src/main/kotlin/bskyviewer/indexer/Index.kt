@@ -206,7 +206,7 @@ class Index(
                 }
             } catch (e: Exception) {
                 logger.error(e) { "error indexing $value" }
-                doc.add(KeywordField("error", "error", storage("error")))
+                doc.add(KeywordField("has", "error", storage("has")))
             }
 
             try {
