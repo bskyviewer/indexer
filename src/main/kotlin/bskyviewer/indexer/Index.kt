@@ -119,7 +119,11 @@ class Index(
                 )
             }
             if (params.dids.isNotEmpty()) {
-                builder.add(KeywordField.newSetQuery("did", params.dids.map(::BytesRef)), BooleanClause.Occur.MUST)
+                val terms = object : AbstractCollection<BytesRef>() {
+                    override val size = params.dids.size
+                    override fun iterator() = params.dids.asSequence().map(::BytesRef).iterator()
+                }
+                builder.add(TermInSetQuery("did", terms), BooleanClause.Occur.MUST)
             }
             val query = builder.build()
             val limit = if (params.limit > 0) params.limit else searcher.indexReader.maxDoc()
