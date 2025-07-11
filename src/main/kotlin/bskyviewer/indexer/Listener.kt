@@ -51,65 +51,66 @@ class Listener(
 
         var indexing: Job? = null
         var i = 0
+        var backOff = Duration.ofMillis(500)
 
-        while (running) try {
-            val loop = i
-            val subscription = launch(Dispatchers.IO) {
-                logger.trace { "starting subscription ${i++}" }
-                subscribe()
-                logger.trace { "ending subscription $loop" }
-            }
-
-            // This inner indexing loop repeats as long as indexing takes less time than filling the message buffer
-            // If the buffer fills up, the subscription will end, breaking out of this inner loop and restarting the outer loop.
-            // The next buffer will start loading, to be processed after the currently running indexing task ends.
-            var nextRun = Instant.now().plus(bufferDuration)
-            while (running && subscription.isActive) {
-                try {
-                    indexing?.join()
-                } catch (e: CancellationException) {
-                    logger.info(e) { "ignoring cancellation" }
-                }
-                indexing = null
-                val wait = Duration.between(Instant.now(), nextRun)
-                if (wait.isPositive && syncBuffer { it.size } < bufferWake) {
-                    sleeping = launch { delay(wait) }
-                    select {
-                        sleeping?.onJoin { logger.trace { "slept $wait" } }
-                        subscription.onJoin { logger.trace { "subscription ended, stopping sleep" } }
-                    }
-                }
-                val buf = syncBuffer {
-                    buffer = ArrayList(bufferSize)
-                    it
-                }
-                if (buf.isNotEmpty()) {
-                    indexing = launch(Dispatchers.Default) {
-                        logger.trace { "indexing $loop" }
-                        try {
-                            index.index(buf, true)
-                        } catch (e: Throwable) {
-                            logger.warn(e) {
-                                "retrying without full text. messages: ${
-                                    buf.joinToString("\n") { "${it.did}/${it.commit?.rkey}" }
-                                }"
-                            }
-                            index.index(buf, false)
-                        }
-                        logger.trace { "indexing done $loop" }
-                        val time = buf.maxOf { message -> message.time_us }.micros()
-                        logger.info { "indexed ${buf.size} messages to $time" }
-                    }
-                }
-                nextRun = Instant.now().plus(bufferDuration)
-            }
+        while (running) {
             try {
+                val loop = i
+                val subscription = launch(Dispatchers.IO) {
+                    logger.trace { "starting subscription ${i++}" }
+                    subscribe()
+                    logger.trace { "ending subscription $loop" }
+                }
+
+                // This inner indexing loop repeats as long as indexing takes less time than filling the message buffer
+                // If the buffer fills up, the subscription will end, breaking out of this inner loop and restarting the outer loop.
+                // The next buffer will start loading, to be processed after the currently running indexing task ends.
+                var nextRun = Instant.now().plus(bufferDuration)
+                while (running && subscription.isActive) {
+                    try {
+                        indexing?.join()
+                    } catch (e: CancellationException) {
+                        logger.info(e) { "ignoring cancellation" }
+                    }
+                    indexing = null
+                    val wait = Duration.between(Instant.now(), nextRun)
+                    if (wait.isPositive && syncBuffer { it.size } < bufferWake) {
+                        sleeping = launch { delay(wait) }
+                        select {
+                            sleeping?.onJoin { logger.trace { "slept $wait" } }
+                            subscription.onJoin { logger.trace { "subscription ended, stopping sleep" } }
+                        }
+                    }
+                    val buf = syncBuffer {
+                        buffer = ArrayList(bufferSize)
+                        it
+                    }
+                    if (buf.isNotEmpty()) {
+                        indexing = launch(Dispatchers.Default) {
+                            logger.trace { "indexing $loop" }
+                            try {
+                                index.index(buf, true)
+                            } catch (e: Throwable) {
+                                logger.warn(e) {
+                                    "retrying without full text. messages: ${
+                                        buf.joinToString("\n") { "${it.did}/${it.commit?.rkey}" }
+                                    }"
+                                }
+                                index.index(buf, false)
+                            }
+                            logger.trace { "indexing done $loop" }
+                            val time = buf.maxOf { message -> message.time_us }.micros()
+                            logger.info { "indexed ${buf.size} messages to $time" }
+                        }
+                    }
+                    nextRun = Instant.now().plus(bufferDuration)
+                }
                 subscription.cancelAndJoin()
-            } catch (e: CancellationException) {
-                logger.trace(e) { "subscription canceled" }
+            } catch (e: Throwable) {
+                logger.error(e) { "error in listener loop, waiting $backOff" }
+                delay(backOff)
+                backOff = backOff.plus(backOff)
             }
-        } catch (e: Throwable) {
-            logger.error(e) { "error in listener loop" }
         }
     }
 
