@@ -203,6 +203,7 @@ class Index(
 
                 (record?.labels as? PostLabelsUnion.SelfLabels)?.value?.values?.forEach {
                     doc.add(KeywordField("label", it.`val`, storage("label")))
+                    has.add("label")
                 }
 
                 has.forEach {
@@ -259,4 +260,3 @@ class Index(
         dir.close()
     }
 }
-

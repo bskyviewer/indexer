@@ -11,7 +11,9 @@ import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.time.delay
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.SpringApplication
 import org.springframework.boot.context.event.ApplicationStartedEvent
+import org.springframework.context.ApplicationContext
 import org.springframework.context.annotation.Profile
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
@@ -20,6 +22,8 @@ import sh.christian.ozone.jetstream.JetstreamApi
 import java.time.Duration
 import java.time.Instant
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 
 private val logger = KotlinLogging.logger {}
 const val offset = 1000L
@@ -34,10 +38,11 @@ class Listener(
     @Value("\${indexer.buffer-duration}") val bufferDuration: Duration,
     @Value("\${indexer.buffer-capacity}") val bufferSize: Int,
     @Value("\${indexer.buffer-wakeness}") val bufferWake: Int,
+    val applicationContext: ApplicationContext,
     val index: Index,
 ) :
     AutoCloseable {
-    val client = JetstreamApi()
+
     var buffer = ArrayList<SubscribeMessage>(bufferSize)
     var cursor: Long? = history?.let { Instant.now().minus(it).toMicros() } ?: offset
     var sleeping: Job? = null
@@ -51,7 +56,7 @@ class Listener(
 
         var indexing: Job? = null
         var i = 0
-        var backOff = Duration.ofMillis(500)
+        var backOff = 500.milliseconds
 
         while (running) {
             try {
@@ -108,7 +113,9 @@ class Listener(
                     }
                     subscription.cancelAndJoin()
                 }
+                backOff = 500.milliseconds
             } catch (e: Throwable) {
+                if (backOff > 5.minutes) SpringApplication.exit(applicationContext)
                 logger.error(e) { "error in listener loop, waiting $backOff" }
                 delay(backOff)
                 backOff = backOff.plus(backOff)
@@ -132,10 +139,10 @@ class Listener(
     }
 
     private suspend fun connect(): Flow<SubscribeMessage> {
-        var backOff = Duration.ofMillis(500)
+        var backOff = 500.milliseconds
         while (true) {
             try {
-                return client.subscribe(
+                return JetstreamApi().subscribe(
                     SubscribeQueryParams(
                         wantedCollections = wantedCollections,
                         compress = compress,
@@ -144,7 +151,8 @@ class Listener(
                     )
                 )
             } catch (e: Exception) {
-                logger.error(e) { "error connecting to jetstream" }
+                if (backOff > 5.minutes) SpringApplication.exit(applicationContext)
+                logger.error(e) { "error connecting to jetstream, waiting $backOff before trying again." }
                 delay(backOff)
                 backOff = backOff.plus(backOff)
             }
