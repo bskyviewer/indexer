@@ -29,3 +29,8 @@ jobs:
       - name: Build and push Docker image
         id: push
         run: ./gradlew bootBuildImage --imageName=ghcr.io/${{ github.repository }} --publishImage --no-daemon
+
+      - name: Redeploy render.com service
+        env:
+          URL: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: curl "$URL"
